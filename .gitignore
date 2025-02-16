@@ -1,0 +1,8 @@
+# Environment variables
+.env
+
+# Node modules
+node_modules/
+
+# Generated files
+image-list.json 
