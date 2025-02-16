@@ -49,12 +49,11 @@ function getResizedDiscordUrl(url) {
 // Function to save image list to JSON
 async function saveImageList() {
   try {
-    // Sort imageList by timestamp (newest first)
     imageList.sort((a, b) => b.timestamp - a.timestamp);
     await writeFile('/app/data/image-list.json', JSON.stringify(imageList, null, 2));
-    console.log('Image list saved to /app/data/image-list.json');
+    await sendLog('Image list saved successfully', false, '💾');
   } catch (error) {
-    console.error('Error saving image list:', error);
+    await sendLog(`Error saving image list: ${error.message}`, true);
   }
 }
 
@@ -119,13 +118,13 @@ async function registerCommands() {
       Routes.applicationCommands(client.user.id),
       { body: commands },
     );
-    console.log('Successfully registered application commands.');
+    await sendLog('Successfully registered application commands.', false, '✨');
   } catch (error) {
-    console.error('Error registering commands:', error);
+    await sendLog(`Error registering commands: ${error.message}`, true);
   }
 }
 
-// Update reaction handler to not remove reactions
+// Update reaction handler to only remove bot's checkmark
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   // Ignore bot's own reactions
   if (user.id === client.user.id) return;
@@ -145,8 +144,16 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         const removedImage = imageList.splice(imageIndex, 1)[0];
         await saveImageList();
         
+        // Remove only the bot's checkmark reaction
+        const checkmarkReaction = message.reactions.cache.find(r => 
+          r.emoji.name === '✅' && r.users.cache.has(client.user.id)
+        );
+        if (checkmarkReaction) {
+          await checkmarkReaction.users.remove(client.user.id);
+        }
+        
         const messageUrl = getMessageUrl(message);
-        await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag} ${messageUrl}`, false, '🗑️');
+        await sendLog(`Image ${removedImage.filename} removed by user ${user.tag} ${messageUrl}`, false, '🗑️');
       }
     }
   }
@@ -301,15 +308,21 @@ client.once(Events.ClientReady, async () => {
   if (logChannel) {
     await sendLog('Bot is ready and connected to log channel!', false, '🤖');
   } else {
-    console.error('❌ Could not connect to log channel!');
+    await sendLog('Could not connect to log channel!', true);
   }
   
   await fetchChannelHistory();
 });
 
-// Update the sendLog function to avoid double emojis
+// Update the sendLog function to always log to console
 async function sendLog(message, error = false, emoji = null) {
-  console.log(message);
+  // Use console.error for errors, console.log for normal messages
+  if (error) {
+    console.error(message);
+  } else {
+    console.log(message);
+  }
+  
   if (logChannel) {
     const messageEmoji = emoji || (error ? '❌' : '');
     await logChannel.send(`${messageEmoji} ${message}`);
