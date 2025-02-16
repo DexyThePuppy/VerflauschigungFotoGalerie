@@ -50,8 +50,8 @@ async function saveImageList() {
   try {
     // Sort imageList by timestamp (newest first)
     imageList.sort((a, b) => b.timestamp - a.timestamp);
-    await writeFile('image-list.json', JSON.stringify(imageList, null, 2));
-    console.log('Image list saved to image-list.json');
+    await writeFile('/app/data/image-list.json', JSON.stringify(imageList, null, 2));
+    console.log('Image list saved to /app/data/image-list.json');
   } catch (error) {
     console.error('Error saving image list:', error);
   }

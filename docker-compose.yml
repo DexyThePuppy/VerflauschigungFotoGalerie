@@ -8,7 +8,7 @@ services:
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
       DISCORD_LOG_CHANNEL_ID: ${DISCORD_LOG_CHANNEL_ID}
     volumes:
-      - discord-data:/app/image-list.json
+      - discord-data:/app/data
     restart: unless-stopped
 
 volumes:
