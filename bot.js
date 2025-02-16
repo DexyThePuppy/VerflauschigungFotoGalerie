@@ -107,6 +107,11 @@ function formatReadableTimestamp(timestamp) {
   return formatted;
 }
 
+// Helper function to get Discord message URL
+function getMessageUrl(message) {
+  return `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.id}`;
+}
+
 // Function to register commands
 async function registerCommands() {
   try {
@@ -140,8 +145,8 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         const removedImage = imageList.splice(imageIndex, 1)[0];
         await saveImageList();
         
-        // Don't remove reactions anymore, just log the removal
-        await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag}`, false, '🗑️');
+        const messageUrl = getMessageUrl(message);
+        await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag}\n${messageUrl}`, false, '🗑️');
       }
     }
   }
@@ -234,7 +239,8 @@ async function fetchChannelHistory() {
           
           if (!imageList.some(img => img.originalUrl === attachment.url)) {
             try {
-              await sendLog(`📥 Processing historical image: ${attachment.name}`, false, '📥');
+              const messageUrl = getMessageUrl(message);
+              await sendLog(`📥 Processing historical image: ${attachment.name}\n${messageUrl}`, false, '📥');
               const imageUrl = getResizedDiscordUrl(attachment.url);
               const imageBuffer = await downloadImage(imageUrl);
               
@@ -245,7 +251,8 @@ async function fetchChannelHistory() {
               imageList.push({
                 originalUrl: attachment.url,
                 filename: attachment.name,
-                messageId: message.id, // Add message ID for validation
+                messageId: message.id,
+                messageUrl: messageUrl,
                 size: imageBuffer.length,
                 timestamp: finalTimestamp,
                 'timestamp-readable': formatReadableTimestamp(finalTimestamp),
@@ -338,7 +345,8 @@ client.on(Events.MessageCreate, async (message) => {
     if (!attachment.contentType?.startsWith('image/')) continue;
     
     try {
-      await sendLog(`📸 New image detected: ${attachment.name}`, false, '📸');
+      const messageUrl = getMessageUrl(message);
+      await sendLog(`📸 New image detected: ${attachment.name}\n${messageUrl}`, false, '📸');
       const imageUrl = getResizedDiscordUrl(attachment.url);
       const imageBuffer = await downloadImage(imageUrl);
       
@@ -350,6 +358,7 @@ client.on(Events.MessageCreate, async (message) => {
         originalUrl: attachment.url,
         filename: attachment.name,
         messageId: message.id,
+        messageUrl: messageUrl,
         size: imageBuffer.length,
         timestamp: finalTimestamp,
         'timestamp-readable': formatReadableTimestamp(finalTimestamp),
@@ -361,7 +370,7 @@ client.on(Events.MessageCreate, async (message) => {
       
       await markImageAsProcessed(message, attachment);
       await saveImageList();
-      await sendLog(`✅ Successfully processed: ${attachment.name}`);
+      await sendLog(`✅ Successfully processed: ${attachment.name}\n${messageUrl}`);
     } catch (error) {
       await sendLog(`❌ Error processing ${attachment.name}: ${error.message}`, true);
     }
