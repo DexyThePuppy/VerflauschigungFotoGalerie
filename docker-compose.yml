@@ -1,12 +1,12 @@
-version: '3.8'
-
 services:
   discord-bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: discord-image-bot
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
     volumes:
-      - ./image-list.json:/usr/src/app/image-list.json
+      - ./image-list.json:/app/image-list.json
     restart: unless-stopped 

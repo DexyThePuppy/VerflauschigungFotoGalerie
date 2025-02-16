@@ -1,22 +1,14 @@
 # Use Node.js LTS version
-FROM node:20-slim
+FROM node:20-alpine
 
-# Install required dependencies for Sharp
-RUN apt-get update && apt-get install -y \
-    libvips-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install Sharp dependencies
+RUN apk add --no-cache vips-dev
 
-# Create app directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
+RUN npm ci --only=production
 
-# Install dependencies
-RUN npm install
+COPY bot.js ./
 
-# Copy source code
-COPY . .
-
-# Start the bot
-CMD [ "npm", "start" ] 
+CMD ["node", "bot.js"] 
