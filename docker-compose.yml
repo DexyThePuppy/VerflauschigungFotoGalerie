@@ -1,6 +1,6 @@
 services:
   discord-bot:
-    image: ghcr.io/yourusername/discord-image-bot:latest  # Replace with your container registry
+    image: ghcr.io/dexythepuppy/verflauschigungfotogalerie:latest
     # Or use Docker Hub format:
     # image: yourusername/discord-image-bot:latest
     environment:
