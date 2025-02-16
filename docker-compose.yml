@@ -11,7 +11,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - discord-data:/app/data
+      - type: volume
+        source: discord-data
+        target: /app/data
+        volume:
+          nocopy: true
+    user: "1000:1000"  # Use explicit UID/GID
     restart: unless-stopped
     networks:
       - bot-network

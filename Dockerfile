@@ -15,13 +15,15 @@ RUN npm install --legacy-peer-deps
 # Copy bot files and commands folder
 COPY bot.js ./
 COPY commands ./commands/
+COPY image-list.json ./data/image-list.json
 
-# Create data directory and set permissions
+# Create data directory with proper permissions
 RUN mkdir -p /app/data && \
-    chown -R node:node /app && \
-    chmod 777 /app/data  # Make data directory writable by all
+    chown -R 1000:1000 /app && \
+    chmod -R 755 /app && \
+    chmod 777 /app/data
 
-# Use non-root user
-USER node
+# Switch to non-root user with explicit UID
+USER 1000:1000
 
 CMD ["node", "bot.js"] 
