@@ -11,7 +11,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildMessageReactions
   ]
 });
 
@@ -119,40 +120,135 @@ async function registerCommands() {
   }
 }
 
-// Function to fetch channel history
+// Add reaction handler
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  // Ignore bot's own reactions
+  if (user.id === client.user.id) return;
+  
+  // Only process reactions in the photo channel
+  if (reaction.message.channelId !== photoChannelId) return;
+  
+  // Check for removal reactions
+  if (reaction.emoji.name === '❌' || reaction.emoji.name === '❎') {
+    const message = reaction.message;
+    const attachment = message.attachments.first();
+    
+    if (attachment) {
+      // Find and remove the image from the list
+      const imageIndex = imageList.findIndex(img => img.originalUrl === attachment.url);
+      if (imageIndex !== -1) {
+        const removedImage = imageList.splice(imageIndex, 1)[0];
+        await saveImageList();
+        
+        // Remove all reactions from the message
+        await message.reactions.removeAll();
+        
+        await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag}`, false, '🗑️');
+      }
+    }
+  }
+});
+
+// Update markImageAsProcessed to remove ❌ and ❎ if present
+async function markImageAsProcessed(message, attachment) {
+  try {
+    // Remove any existing ❌ or ❎ reactions
+    for (const reaction of message.reactions.cache.values()) {
+      if (reaction.emoji.name === '❌' || reaction.emoji.name === '❎') {
+        await reaction.remove();
+      }
+    }
+    
+    // Add or keep ✅ reaction
+    const existingReactions = message.reactions.cache.find(r => r.emoji.name === '✅');
+    if (!existingReactions) {
+      await message.react('✅');
+    }
+  } catch (error) {
+    await sendLog(`Unable to manage reactions for ${attachment.name}: ${error.message}`, true);
+  }
+}
+
+// Update validateImageList to handle removal reactions
+async function validateImageList(channel) {
+  await sendLog('🔍 Starting image list validation...');
+  const validImages = [];
+  let removedCount = 0;
+
+  for (const image of imageList) {
+    try {
+      const messages = await channel.messages.fetch({ around: image.messageId, limit: 1 });
+      const message = messages.first();
+      
+      if (message) {
+        // Check for removal reactions
+        const hasRemovalReaction = message.reactions.cache.some(r => 
+          r.emoji.name === '❌' || r.emoji.name === '❎'
+        );
+        
+        if (hasRemovalReaction || !message.attachments.some(att => att.url === image.originalUrl)) {
+          await sendLog(`🗑️ Removing ${hasRemovalReaction ? 'marked' : 'invalid'} image: ${image.filename}`, false, '🗑️');
+          // Remove all reactions
+          await message.reactions.removeAll();
+          removedCount++;
+          continue;
+        }
+        
+        validImages.push(image);
+        await markImageAsProcessed(message, message.attachments.first());
+      } else {
+        await sendLog(`Unable to find message for ${image.filename}, removing from list`, true);
+        removedCount++;
+      }
+    } catch (error) {
+      await sendLog(`Error validating ${image.filename}: ${error.message}`, true);
+      removedCount++;
+    }
+  }
+
+  if (removedCount > 0) {
+    imageList.length = 0;
+    imageList.push(...validImages);
+    await saveImageList();
+    await sendLog(`♻️ Removed ${removedCount} images from list`);
+  } else {
+    await sendLog('✨ All images in list are valid');
+  }
+}
+
+// Update the fetchChannelHistory function
 async function fetchChannelHistory() {
   try {
-    await sendLog('Starting channel history fetch...');
+    await sendLog('📚 Starting channel history fetch...', false, '📚');
     const channel = await client.channels.fetch(photoChannelId);
-    if (!channel) return;
+    if (!channel) {
+      await sendLog('❌ Photo channel not found!', true);
+      return;
+    }
 
-    console.log('Fetching channel history...');
+    await sendLog('🔄 Fetching channel messages...', false, '🔄');
     let messages = await channel.messages.fetch({ limit: 100 });
+    let processedCount = 0;
     
     while (messages.size > 0) {
       for (const message of messages.values()) {
         for (const attachment of message.attachments.values()) {
           if (!attachment.contentType?.startsWith('image/')) continue;
           
-          // Check if image is already in the list
           if (!imageList.some(img => img.originalUrl === attachment.url)) {
             try {
-              console.log(`Processing historical image: ${attachment.url}`);
+              await sendLog(`📥 Processing historical image: ${attachment.name}`, false, '📥');
               const imageUrl = getResizedDiscordUrl(attachment.url);
               const imageBuffer = await downloadImage(imageUrl);
               
-              // Change timestamp priority:
-              // 1. VRChat filename timestamp (for actual photo time)
-              // 2. Discord URL timestamp (fallback)
-              // 3. Message timestamp (last resort)
               const fileTimestamp = parseVRChatTimestamp(attachment.name);
               const urlTimestamp = parseDiscordUrlTimestamp(attachment.url);
-              
               const finalTimestamp = fileTimestamp || urlTimestamp || message.createdTimestamp;
               
               imageList.push({
                 originalUrl: attachment.url,
                 filename: attachment.name,
+                messageId: message.id, // Add message ID for validation
                 size: imageBuffer.length,
                 timestamp: finalTimestamp,
                 'timestamp-readable': formatReadableTimestamp(finalTimestamp),
@@ -161,14 +257,19 @@ async function fetchChannelHistory() {
                   height: (await sharp(imageBuffer).metadata()).height
                 }
               });
+              
+              await markImageAsProcessed(message, attachment);
+              processedCount++;
             } catch (error) {
-              console.error(`Error processing historical image ${attachment.url}:`, error);
+              await sendLog(`Error processing ${attachment.name}: ${error.message}`, true);
             }
+          } else {
+            // Image already in list, just add reaction if missing
+            await markImageAsProcessed(message, attachment);
           }
         }
       }
       
-      // Get next batch of messages
       const lastMessage = messages.last();
       messages = await channel.messages.fetch({ 
         limit: 100,
@@ -177,36 +278,47 @@ async function fetchChannelHistory() {
     }
     
     await saveImageList();
-    await sendLog('Channel history processing complete!');
+    await sendLog(`📊 Channel history complete! Processed ${processedCount} new images.`);
+    
+    // Validate existing images
+    await validateImageList(channel);
+    
   } catch (error) {
-    await sendLog(`Error fetching channel history: ${error.message}`, true);
-    console.error(error);
+    await sendLog(`Error in history fetch: ${error.message}`, true);
   }
 }
 
-// Update the client.once event
+// Update the client ready event
 client.once(Events.ClientReady, async () => {
-  console.log('Discord bot is ready!');
+  await sendLog('🚀 Bot is starting up...', false, '🚀');
   await registerCommands();
   
-  // Get the log channel using the current logChannelId
   logChannel = await client.channels.fetch(logChannelId);
-  
   if (logChannel) {
-    await logChannel.send('🤖 Bot started and ready to process images!');
+    await sendLog('🤖 Bot is ready and connected to log channel!');
+  } else {
+    console.error('❌ Could not connect to log channel!');
   }
   
   await fetchChannelHistory();
 });
 
-// Add logging function
-async function sendLog(message, error = false) {
+// Update the sendLog function to support custom emojis
+async function sendLog(message, error = false, emoji = null) {
   console.log(message);
   if (logChannel) {
-    const emoji = error ? '❌' : '✅';
-    await logChannel.send(`${emoji} ${message}`);
+    const defaultEmoji = error ? '❌' : '✅';
+    const messageEmoji = emoji || defaultEmoji;
+    await logChannel.send(`${messageEmoji} ${message}`);
   }
 }
+
+// Update process termination handling
+process.on('SIGINT', async () => {
+  await sendLog('🛑 Bot is shutting down...', false, '🛑');
+  await saveImageList();
+  process.exit(0);
+});
 
 // Add command handler
 client.on(Events.InteractionCreate, async interaction => {
@@ -221,7 +333,7 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// Update the message event to use photoChannelId
+// Update the message event handler
 client.on(Events.MessageCreate, async (message) => {
   if (message.channelId !== photoChannelId) return;
   
@@ -229,22 +341,18 @@ client.on(Events.MessageCreate, async (message) => {
     if (!attachment.contentType?.startsWith('image/')) continue;
     
     try {
-      await sendLog(`Processing image: ${attachment.name}`);
+      await sendLog(`📸 New image detected: ${attachment.name}`, false, '📸');
       const imageUrl = getResizedDiscordUrl(attachment.url);
       const imageBuffer = await downloadImage(imageUrl);
       
-      // Change timestamp priority:
-      // 1. VRChat filename timestamp (for actual photo time)
-      // 2. Discord URL timestamp (fallback)
-      // 3. Message timestamp (last resort)
       const fileTimestamp = parseVRChatTimestamp(attachment.name);
       const urlTimestamp = parseDiscordUrlTimestamp(attachment.url);
-      
       const finalTimestamp = fileTimestamp || urlTimestamp || message.createdTimestamp;
       
       imageList.push({
         originalUrl: attachment.url,
         filename: attachment.name,
+        messageId: message.id,
         size: imageBuffer.length,
         timestamp: finalTimestamp,
         'timestamp-readable': formatReadableTimestamp(finalTimestamp),
@@ -254,24 +362,16 @@ client.on(Events.MessageCreate, async (message) => {
         }
       });
       
+      await markImageAsProcessed(message, attachment);
       await saveImageList();
-      
-      await sendLog(`Successfully processed: ${attachment.name}`);
+      await sendLog(`✅ Successfully processed: ${attachment.name}`);
     } catch (error) {
-      await sendLog(`Error processing image ${attachment.name}: ${error.message}`, true);
-      console.error(error);
+      await sendLog(`❌ Error processing ${attachment.name}: ${error.message}`, true);
     }
   }
 });
 
 // Login to Discord
 client.login(process.env.DISCORD_BOT_TOKEN);
-
-// Update process termination handling
-process.on('SIGINT', async () => {
-  await sendLog('Bot shutting down...');
-  await saveImageList();
-  process.exit(0);
-});
 
 console.log('Starting Discord bot...');
