@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Events, SlashCommandBuilder, REST, Routes } from 'discord.js';
 import sharp from 'sharp';
 import { writeFile } from 'fs/promises';
 import { get } from 'https';
@@ -16,7 +16,35 @@ const client = new Client({
 
 const MAX_RESOLUTION = 2048;
 const imageList = [];
+const commands = [
+  new SlashCommandBuilder()
+    .setName('fotogalerie')
+    .setDescription('Manage Fotogalerie settings')
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('photosid')
+        .setDescription('Set the channel ID for photos')
+        .addStringOption(option =>
+          option
+            .setName('channelid')
+            .setDescription('The channel ID to use for photos')
+            .setRequired(true)))
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('logsid')
+        .setDescription('Set the channel ID for logs')
+        .addStringOption(option =>
+          option
+            .setName('channelid')
+            .setDescription('The channel ID to use for logs')
+            .setRequired(true)))
+];
+
+const rest = new REST().setToken(process.env.DISCORD_BOT_TOKEN);
+
 let logChannel = null;
+let photoChannelId = process.env.DISCORD_CHANNEL_ID;
+let logChannelId = process.env.DISCORD_LOG_CHANNEL_ID;
 
 // Function to download image from URL
 async function downloadImage(url) {
@@ -99,11 +127,24 @@ function formatReadableTimestamp(timestamp) {
   return formatted;
 }
 
+// Function to register commands
+async function registerCommands() {
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands },
+    );
+    console.log('Successfully registered application commands.');
+  } catch (error) {
+    console.error('Error registering commands:', error);
+  }
+}
+
 // Function to fetch channel history
 async function fetchChannelHistory() {
   try {
     await sendLog('Starting channel history fetch...');
-    const channel = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID);
+    const channel = await client.channels.fetch(photoChannelId);
     if (!channel) return;
 
     console.log('Fetching channel history...');
@@ -167,11 +208,11 @@ async function fetchChannelHistory() {
 // Update the client.once event
 client.once(Events.ClientReady, async () => {
   console.log('Discord bot is ready!');
+  await registerCommands();
   
-  // Get the log channel
-  logChannel = await client.channels.fetch(process.env.DISCORD_LOG_CHANNEL_ID);
+  // Get the log channel using the current logChannelId
+  logChannel = await client.channels.fetch(logChannelId);
   
-  // Send startup message to log channel
   if (logChannel) {
     await logChannel.send('🤖 Bot started and ready to process images!');
   }
@@ -188,9 +229,53 @@ async function sendLog(message, error = false) {
   }
 }
 
-// Update error handling and logging
+// Add command handler
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'fotogalerie') {
+    // Check if user has admin permissions
+    if (!interaction.member.permissions.has('ADMINISTRATOR')) {
+      await interaction.reply({ 
+        content: '❌ You need administrator permissions to use this command!',
+        ephemeral: true 
+      });
+      return;
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    const newChannelId = interaction.options.getString('channelid');
+
+    try {
+      // Verify the channel exists and bot has access
+      const channel = await client.channels.fetch(newChannelId);
+      if (!channel) throw new Error('Channel not found');
+
+      if (subcommand === 'photosid') {
+        photoChannelId = newChannelId;
+        await interaction.reply(`✅ Photo channel updated to: ${channel.name} (${newChannelId})`);
+        if (logChannel) {
+          await logChannel.send(`📸 Photo channel changed to: ${channel.name} (${newChannelId})`);
+        }
+      } else if (subcommand === 'logsid') {
+        logChannelId = newChannelId;
+        const newLogChannel = channel;
+        logChannel = newLogChannel;
+        await interaction.reply(`✅ Log channel updated to: ${channel.name} (${newChannelId})`);
+        await newLogChannel.send(`📝 This channel is now set as the log channel`);
+      }
+    } catch (error) {
+      await interaction.reply({ 
+        content: `❌ Error: ${error.message}. Make sure the channel ID is valid and the bot has access to it.`,
+        ephemeral: true 
+      });
+    }
+  }
+});
+
+// Update the message event to use photoChannelId
 client.on(Events.MessageCreate, async (message) => {
-  if (message.channelId !== process.env.DISCORD_CHANNEL_ID) return;
+  if (message.channelId !== photoChannelId) return;
   
   for (const attachment of message.attachments.values()) {
     if (!attachment.contentType?.startsWith('image/')) continue;
