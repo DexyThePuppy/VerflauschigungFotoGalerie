@@ -1,9 +1,10 @@
 import { Client, GatewayIntentBits, Events, SlashCommandBuilder, REST, Routes } from 'discord.js';
 import sharp from 'sharp';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, readFile } from 'fs/promises';
 import { get } from 'https';
 import 'dotenv/config';
 import fotogalerieCommand from './commands/fotogalerie.js';
+import express from 'express';
 
 const client = new Client({
   intents: [
@@ -49,9 +50,6 @@ function getResizedDiscordUrl(url) {
 // Function to save image list to JSON
 async function saveImageList() {
   try {
-    // Ensure data directory exists
-    await mkdir('/app/data', { recursive: true });
-    
     imageList.sort((a, b) => b.timestamp - a.timestamp);
     await writeFile('/app/data/image-list.json', JSON.stringify(imageList, null, 2));
     await sendLog('Image list saved successfully', false, '💾');
@@ -330,8 +328,9 @@ client.once(Events.ClientReady, async () => {
   logChannel = await client.channels.fetch(logChannelId);
   if (logChannel) {
     const serverIp = await getServerIp();
+    const port = process.env.PORT || 3000;
     await sendLog('Bot is ready and connected to log channel!', false, '🤖');
-    await sendLog(`JSON file location: http://${serverIp}/app/data/image-list.json`, false, '📁');
+    await sendLog(`JSON API endpoint: http://${serverIp}:${port}/image-list.json`, false, '📁');
   } else {
     await sendLog('Could not connect to log channel!', true);
   }
@@ -418,3 +417,29 @@ client.on(Events.MessageCreate, async (message) => {
 client.login(process.env.DISCORD_BOT_TOKEN);
 
 console.log('Starting Discord bot...');
+
+// Create Express app
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Add CORS headers
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
+
+// Serve the JSON file
+app.get('/image-list.json', async (req, res) => {
+  try {
+    const jsonData = await readFile('/app/data/image-list.json', 'utf8');
+    res.json(JSON.parse(jsonData));
+  } catch (error) {
+    res.status(500).json({ error: 'Could not read image list' });
+  }
+});
+
+// Start the server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Web server listening on port ${PORT}`);
+});
