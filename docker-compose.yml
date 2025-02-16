@@ -1,6 +1,8 @@
 services:
   discord-bot:
     image: ghcr.io/dexythepuppy/verflauschigungfotogalerie:latest
+    # Or use Docker Hub format:
+    # image: yourusername/discord-image-bot:latest
     environment:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
@@ -10,15 +12,16 @@ services:
       - "3000:3000"
     volumes:
       - discord-data:/app/data
-    user: "1000:1000"
+    user: "1000:1000"  # Use explicit UID/GID
     restart: unless-stopped
     networks:
       - bot-network
 
 volumes:
   discord-data:
-    external: true  # Use existing volume
+    name: discord-data  # Use named volume instead of external
+    driver: local
 
 networks:
   bot-network:
-    driver: bridge
+    driver: bridge 
