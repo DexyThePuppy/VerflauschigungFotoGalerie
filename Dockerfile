@@ -9,6 +9,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
+# Copy bot files and commands folder
 COPY bot.js ./
+COPY commands ./commands/
 
 CMD ["node", "bot.js"] 
