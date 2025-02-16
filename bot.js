@@ -258,6 +258,7 @@ async function fetchChannelHistory() {
               
               imageList.push({
                 originalUrl: attachment.url,
+                resizedUrl: getResizedDiscordUrl(attachment.url),
                 filename: attachment.name,
                 messageId: message.id,
                 messageUrl: messageUrl,
@@ -372,6 +373,7 @@ client.on(Events.MessageCreate, async (message) => {
       
       imageList.push({
         originalUrl: attachment.url,
+        resizedUrl: getResizedDiscordUrl(attachment.url),
         filename: attachment.name,
         messageId: message.id,
         messageUrl: messageUrl,
