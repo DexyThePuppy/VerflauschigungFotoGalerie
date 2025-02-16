@@ -146,7 +146,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         await saveImageList();
         
         const messageUrl = getMessageUrl(message);
-        await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag}\n${messageUrl}`, false, '🗑️');
+        await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag} ${messageUrl}`, false, '🗑️');
       }
     }
   }
@@ -240,7 +240,7 @@ async function fetchChannelHistory() {
           if (!imageList.some(img => img.originalUrl === attachment.url)) {
             try {
               const messageUrl = getMessageUrl(message);
-              await sendLog(`📥 Processing historical image: ${attachment.name}\n${messageUrl}`, false, '📥');
+              await sendLog(`📥 Processing historical image: ${attachment.name} ${messageUrl}`, false, '📥');
               const imageUrl = getResizedDiscordUrl(attachment.url);
               const imageBuffer = await downloadImage(imageUrl);
               
@@ -307,12 +307,11 @@ client.once(Events.ClientReady, async () => {
   await fetchChannelHistory();
 });
 
-// Update the sendLog function to support custom emojis
+// Update the sendLog function to only use custom emojis
 async function sendLog(message, error = false, emoji = null) {
   console.log(message);
   if (logChannel) {
-    const defaultEmoji = error ? '❌' : '✅';
-    const messageEmoji = emoji || defaultEmoji;
+    const messageEmoji = emoji || (error ? '❌' : '');
     await logChannel.send(`${messageEmoji} ${message}`);
   }
 }
@@ -346,7 +345,7 @@ client.on(Events.MessageCreate, async (message) => {
     
     try {
       const messageUrl = getMessageUrl(message);
-      await sendLog(`📸 New image detected: ${attachment.name}\n${messageUrl}`, false, '📸');
+      await sendLog(`📸 New image detected: ${attachment.name} ${messageUrl}`, false, '📸');
       const imageUrl = getResizedDiscordUrl(attachment.url);
       const imageBuffer = await downloadImage(imageUrl);
       
@@ -370,7 +369,7 @@ client.on(Events.MessageCreate, async (message) => {
       
       await markImageAsProcessed(message, attachment);
       await saveImageList();
-      await sendLog(`✅ Successfully processed: ${attachment.name}\n${messageUrl}`);
+      await sendLog(`✅ Successfully processed: ${attachment.name} ${messageUrl}`);
     } catch (error) {
       await sendLog(`❌ Error processing ${attachment.name}: ${error.message}`, true);
     }
