@@ -13,6 +13,7 @@
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.7",
-    "sharp": "^0.33.2"
+    "sharp": "^0.33.2",
+    "xmldom": "^0.6.0"
   }
 }
