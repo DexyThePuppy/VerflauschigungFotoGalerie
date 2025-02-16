@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { writeFile } from 'fs/promises';
 import { get } from 'https';
 import 'dotenv/config';
+import fotogalerieCommand from './commands/fotogalerie.js';
 
 const client = new Client({
   intents: [
@@ -16,29 +17,7 @@ const client = new Client({
 
 const MAX_RESOLUTION = 2048;
 const imageList = [];
-const commands = [
-  new SlashCommandBuilder()
-    .setName('fotogalerie')
-    .setDescription('Manage Fotogalerie settings')
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('photosid')
-        .setDescription('Set the channel ID for photos')
-        .addStringOption(option =>
-          option
-            .setName('channelid')
-            .setDescription('The channel ID to use for photos')
-            .setRequired(true)))
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('logsid')
-        .setDescription('Set the channel ID for logs')
-        .addStringOption(option =>
-          option
-            .setName('channelid')
-            .setDescription('The channel ID to use for logs')
-            .setRequired(true)))
-];
+const commands = [fotogalerieCommand.data];
 
 const rest = new REST().setToken(process.env.DISCORD_BOT_TOKEN);
 
@@ -234,42 +213,11 @@ client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'fotogalerie') {
-    // Check if user has admin permissions
-    if (!interaction.member.permissions.has('ADMINISTRATOR')) {
-      await interaction.reply({ 
-        content: '❌ You need administrator permissions to use this command!',
-        ephemeral: true 
-      });
-      return;
-    }
-
-    const subcommand = interaction.options.getSubcommand();
-    const newChannelId = interaction.options.getString('channelid');
-
-    try {
-      // Verify the channel exists and bot has access
-      const channel = await client.channels.fetch(newChannelId);
-      if (!channel) throw new Error('Channel not found');
-
-      if (subcommand === 'photosid') {
-        photoChannelId = newChannelId;
-        await interaction.reply(`✅ Photo channel updated to: ${channel.name} (${newChannelId})`);
-        if (logChannel) {
-          await logChannel.send(`📸 Photo channel changed to: ${channel.name} (${newChannelId})`);
-        }
-      } else if (subcommand === 'logsid') {
-        logChannelId = newChannelId;
-        const newLogChannel = channel;
-        logChannel = newLogChannel;
-        await interaction.reply(`✅ Log channel updated to: ${channel.name} (${newChannelId})`);
-        await newLogChannel.send(`📝 This channel is now set as the log channel`);
-      }
-    } catch (error) {
-      await interaction.reply({ 
-        content: `❌ Error: ${error.message}. Make sure the channel ID is valid and the bot has access to it.`,
-        ephemeral: true 
-      });
-    }
+    await fotogalerieCommand.execute(interaction, { 
+      photoChannelId, 
+      logChannelId, 
+      logChannel 
+    });
   }
 });
 
