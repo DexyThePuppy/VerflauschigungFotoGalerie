@@ -16,11 +16,10 @@ RUN npm install --legacy-peer-deps
 COPY bot.js ./
 COPY commands ./commands/
 
-# Create data directory
-RUN mkdir -p /app/data
-
-# Set proper permissions
-RUN chown -R node:node /app
+# Create data directory and set permissions
+RUN mkdir -p /app/data && \
+    chown -R node:node /app && \
+    chmod 777 /app/data  # Make data directory writable by all
 
 # Use non-root user
 USER node
