@@ -174,7 +174,7 @@ async function markImageAsProcessed(message, attachment) {
 
 // Update validateImageList to respect removal reactions
 async function validateImageList(channel) {
-  await sendLog('🔍 Starting image list validation...');
+  await sendLog('Starting image list validation...', false, '🔍');
   const validImages = [];
   let removedCount = 0;
 
@@ -190,7 +190,7 @@ async function validateImageList(channel) {
         );
         
         if (hasRemovalReaction || !message.attachments.some(att => att.url === image.originalUrl)) {
-          await sendLog(`🗑️ Removing ${hasRemovalReaction ? 'marked' : 'invalid'} image: ${image.filename}`, false, '🗑️');
+          await sendLog(`Removing ${hasRemovalReaction ? 'marked' : 'invalid'} image: ${image.filename}`, false, '🗑️');
           // Don't remove reactions, let them stay as a record
           removedCount++;
           continue;
@@ -212,23 +212,23 @@ async function validateImageList(channel) {
     imageList.length = 0;
     imageList.push(...validImages);
     await saveImageList();
-    await sendLog(`♻️ Removed ${removedCount} images from list`);
+    await sendLog(`Removed ${removedCount} images from list`, false, '♻️');
   } else {
-    await sendLog('✨ All images in list are valid');
+    await sendLog('All images in list are valid', false, '✨');
   }
 }
 
 // Update the fetchChannelHistory function
 async function fetchChannelHistory() {
   try {
-    await sendLog('📚 Starting channel history fetch...', false, '📚');
+    await sendLog('Starting channel history fetch...', false, '📚');
     const channel = await client.channels.fetch(photoChannelId);
     if (!channel) {
-      await sendLog('❌ Photo channel not found!', true);
+      await sendLog('Photo channel not found!', true);
       return;
     }
 
-    await sendLog('🔄 Fetching channel messages...', false, '🔄');
+    await sendLog('Fetching channel messages...', false, '🔄');
     let messages = await channel.messages.fetch({ limit: 100 });
     let processedCount = 0;
     
@@ -240,7 +240,7 @@ async function fetchChannelHistory() {
           if (!imageList.some(img => img.originalUrl === attachment.url)) {
             try {
               const messageUrl = getMessageUrl(message);
-              await sendLog(`📥 Processing historical image: ${attachment.name} ${messageUrl}`, false, '📥');
+              await sendLog(`Processing historical image: ${attachment.name} ${messageUrl}`, false, '📥');
               const imageUrl = getResizedDiscordUrl(attachment.url);
               const imageBuffer = await downloadImage(imageUrl);
               
@@ -282,7 +282,7 @@ async function fetchChannelHistory() {
     }
     
     await saveImageList();
-    await sendLog(`📊 Channel history complete! Processed ${processedCount} new images.`);
+    await sendLog(`Channel history complete! Processed ${processedCount} new images.`, false, '📊');
     
     // Validate existing images
     await validateImageList(channel);
@@ -294,12 +294,12 @@ async function fetchChannelHistory() {
 
 // Update the client ready event
 client.once(Events.ClientReady, async () => {
-  await sendLog('🚀 Bot is starting up...', false, '🚀');
+  await sendLog('Bot is starting up...', false, '🚀');
   await registerCommands();
   
   logChannel = await client.channels.fetch(logChannelId);
   if (logChannel) {
-    await sendLog('🤖 Bot is ready and connected to log channel!');
+    await sendLog('Bot is ready and connected to log channel!', false, '🤖');
   } else {
     console.error('❌ Could not connect to log channel!');
   }
@@ -307,7 +307,7 @@ client.once(Events.ClientReady, async () => {
   await fetchChannelHistory();
 });
 
-// Update the sendLog function to only use custom emojis
+// Update the sendLog function to avoid double emojis
 async function sendLog(message, error = false, emoji = null) {
   console.log(message);
   if (logChannel) {
@@ -318,7 +318,7 @@ async function sendLog(message, error = false, emoji = null) {
 
 // Update process termination handling
 process.on('SIGINT', async () => {
-  await sendLog('🛑 Bot is shutting down...', false, '🛑');
+  await sendLog('Bot is shutting down...', false, '🛑');
   await saveImageList();
   process.exit(0);
 });
@@ -345,7 +345,7 @@ client.on(Events.MessageCreate, async (message) => {
     
     try {
       const messageUrl = getMessageUrl(message);
-      await sendLog(`📸 New image detected: ${attachment.name} ${messageUrl}`, false, '📸');
+      await sendLog(`New image detected: ${attachment.name} ${messageUrl}`, false, '📸');
       const imageUrl = getResizedDiscordUrl(attachment.url);
       const imageBuffer = await downloadImage(imageUrl);
       
@@ -369,9 +369,9 @@ client.on(Events.MessageCreate, async (message) => {
       
       await markImageAsProcessed(message, attachment);
       await saveImageList();
-      await sendLog(`✅ Successfully processed: ${attachment.name} ${messageUrl}`);
+      await sendLog(`Successfully processed: ${attachment.name} ${messageUrl}`, false, '✅');
     } catch (error) {
-      await sendLog(`❌ Error processing ${attachment.name}: ${error.message}`, true);
+      await sendLog(`Error processing ${attachment.name}: ${error.message}`, true);
     }
   }
 });
