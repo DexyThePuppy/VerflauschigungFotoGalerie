@@ -12,14 +12,16 @@ COPY package*.json ./
 # Install dependencies with legacy peer deps (helps with compatibility)
 RUN npm install --legacy-peer-deps
 
+# Create data directory first
+RUN mkdir -p /app/data
+
 # Copy bot files and commands folder
 COPY bot.js ./
 COPY commands ./commands/
-COPY image-list.json ./data/image-list.json
+COPY image-list.json /app/data/image-list.json
 
-# Create data directory with proper permissions
-RUN mkdir -p /app/data && \
-    chown -R 1000:1000 /app && \
+# Set proper permissions
+RUN chown -R 1000:1000 /app && \
     chmod -R 755 /app && \
     chmod 777 /app/data
 
