@@ -300,37 +300,17 @@ async function fetchChannelHistory() {
   }
 }
 
-// Add function to get server's IP address
-async function getServerIp() {
-  try {
-    const { networkInterfaces } = await import('os');
-    const nets = networkInterfaces();
-    
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]) {
-        // Skip internal and non-IPv4 addresses
-        if (!net.internal && net.family === 'IPv4') {
-          return net.address;
-        }
-      }
-    }
-    return 'localhost'; // Fallback
-  } catch (error) {
-    return 'localhost';
-  }
-}
-
-// Update the client ready event
+// Update the client ready event to use the public IP
 client.once(Events.ClientReady, async () => {
   await sendLog('Bot is starting up...', false, '🚀');
   await registerCommands();
   
   logChannel = await client.channels.fetch(logChannelId);
   if (logChannel) {
-    const serverIp = await getServerIp();
+    const publicIp = '212.227.57.140';  // Use the public IP
     const port = process.env.PORT || 3000;
     await sendLog('Bot is ready and connected to log channel!', false, '🤖');
-    await sendLog(`JSON API endpoint: http://${serverIp}:${port}/image-list.json`, false, '📁');
+    await sendLog(`JSON API endpoint: http://${publicIp}:${port}/image-list.json`, false, '📁');
   } else {
     await sendLog('Could not connect to log channel!', true);
   }
@@ -422,24 +402,39 @@ console.log('Starting Discord bot...');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Add CORS headers
+// Update the web server part
 app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
   next();
 });
 
-// Serve the JSON file
+// Add a health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Update JSON endpoint with better error handling
 app.get('/image-list.json', async (req, res) => {
   try {
+    await sendLog('Received request for image-list.json', false, '🌐');
     const jsonData = await readFile('/app/data/image-list.json', 'utf8');
     res.json(JSON.parse(jsonData));
+    await sendLog('Successfully served image-list.json', false, '✅');
   } catch (error) {
-    res.status(500).json({ error: 'Could not read image list' });
+    await sendLog(`Error serving image-list.json: ${error.message}`, true);
+    res.status(500).json({ 
+      error: 'Could not read image list',
+      details: error.message 
+    });
   }
 });
 
-// Start the server
+// Update server startup logging
 app.listen(PORT, '0.0.0.0', () => {
+  const publicIp = '212.227.57.140';  // Use the public IP
   console.log(`Web server listening on port ${PORT}`);
+  console.log(`Health check: http://${publicIp}:${PORT}/health`);
+  console.log(`JSON endpoint: http://${publicIp}:${PORT}/image-list.json`);
 });
