@@ -21,6 +21,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Create empty image-list.json if it doesn't exist
+      - name: Create image-list.json
+        run: echo "[]" > image-list.json
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
