@@ -13,4 +13,4 @@ services:
 
 volumes:
   discord-data:
-    external: true 
+    driver: local 
