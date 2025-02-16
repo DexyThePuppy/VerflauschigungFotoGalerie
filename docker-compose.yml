@@ -1,12 +1,15 @@
 services:
   discord-bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: discord-image-bot
+    image: ghcr.io/yourusername/discord-image-bot:latest  # Replace with your container registry
+    # Or use Docker Hub format:
+    # image: yourusername/discord-image-bot:latest
     environment:
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
     volumes:
-      - ./image-list.json:/app/image-list.json
-    restart: unless-stopped 
+      - discord-data:/app/image-list.json
+    restart: unless-stopped
+
+volumes:
+  discord-data:
+    external: true 
