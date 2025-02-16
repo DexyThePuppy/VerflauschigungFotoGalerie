@@ -6,6 +6,7 @@ services:
     environment:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
+      DISCORD_LOG_CHANNEL_ID: ${DISCORD_LOG_CHANNEL_ID}
     volumes:
       - discord-data:/app/image-list.json
     restart: unless-stopped

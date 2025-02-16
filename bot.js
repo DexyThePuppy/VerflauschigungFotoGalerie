@@ -16,6 +16,7 @@ const client = new Client({
 
 const MAX_RESOLUTION = 2048;
 const imageList = [];
+let logChannel = null;
 
 // Function to download image from URL
 async function downloadImage(url) {
@@ -101,6 +102,7 @@ function formatReadableTimestamp(timestamp) {
 // Function to fetch channel history
 async function fetchChannelHistory() {
   try {
+    await sendLog('Starting channel history fetch...');
     const channel = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID);
     if (!channel) return;
 
@@ -155,17 +157,38 @@ async function fetchChannelHistory() {
     }
     
     await saveImageList();
-    console.log('Channel history processing complete!');
+    await sendLog('Channel history processing complete!');
   } catch (error) {
-    console.error('Error fetching channel history:', error);
+    await sendLog(`Error fetching channel history: ${error.message}`, true);
+    console.error(error);
   }
 }
 
+// Update the client.once event
 client.once(Events.ClientReady, async () => {
   console.log('Discord bot is ready!');
-  await fetchChannelHistory(); // Fetch history when bot starts
+  
+  // Get the log channel
+  logChannel = await client.channels.fetch(process.env.DISCORD_LOG_CHANNEL_ID);
+  
+  // Send startup message to log channel
+  if (logChannel) {
+    await logChannel.send('🤖 Bot started and ready to process images!');
+  }
+  
+  await fetchChannelHistory();
 });
 
+// Add logging function
+async function sendLog(message, error = false) {
+  console.log(message);
+  if (logChannel) {
+    const emoji = error ? '❌' : '✅';
+    await logChannel.send(`${emoji} ${message}`);
+  }
+}
+
+// Update error handling and logging
 client.on(Events.MessageCreate, async (message) => {
   if (message.channelId !== process.env.DISCORD_CHANNEL_ID) return;
   
@@ -173,7 +196,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (!attachment.contentType?.startsWith('image/')) continue;
     
     try {
-      console.log(`Processing image: ${attachment.url}`);
+      await sendLog(`Processing image: ${attachment.name}`);
       const imageUrl = getResizedDiscordUrl(attachment.url);
       const imageBuffer = await downloadImage(imageUrl);
       
@@ -200,8 +223,10 @@ client.on(Events.MessageCreate, async (message) => {
       
       await saveImageList();
       
+      await sendLog(`Successfully processed: ${attachment.name}`);
     } catch (error) {
-      console.error(`Error processing image ${attachment.url}:`, error);
+      await sendLog(`Error processing image ${attachment.name}: ${error.message}`, true);
+      console.error(error);
     }
   }
 });
@@ -209,10 +234,11 @@ client.on(Events.MessageCreate, async (message) => {
 // Login to Discord
 client.login(process.env.DISCORD_BOT_TOKEN);
 
-// Handle process termination
-process.on('SIGINT', () => {
-  console.log('Saving final image list and shutting down...');
-  saveImageList().then(() => process.exit(0));
+// Update process termination handling
+process.on('SIGINT', async () => {
+  await sendLog('Bot shutting down...');
+  await saveImageList();
+  process.exit(0);
 });
 
 console.log('Starting Discord bot...');
