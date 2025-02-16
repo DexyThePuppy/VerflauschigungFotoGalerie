@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Events, SlashCommandBuilder, REST, Routes } from 'discord.js';
 import sharp from 'sharp';
-import { writeFile } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 import { get } from 'https';
 import 'dotenv/config';
 import fotogalerieCommand from './commands/fotogalerie.js';
@@ -49,6 +49,9 @@ function getResizedDiscordUrl(url) {
 // Function to save image list to JSON
 async function saveImageList() {
   try {
+    // Ensure data directory exists
+    await mkdir('/app/data', { recursive: true });
+    
     imageList.sort((a, b) => b.timestamp - a.timestamp);
     await writeFile('/app/data/image-list.json', JSON.stringify(imageList, null, 2));
     await sendLog('Image list saved successfully', false, '💾');
@@ -299,6 +302,26 @@ async function fetchChannelHistory() {
   }
 }
 
+// Add function to get server's IP address
+async function getServerIp() {
+  try {
+    const { networkInterfaces } = await import('os');
+    const nets = networkInterfaces();
+    
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+        // Skip internal and non-IPv4 addresses
+        if (!net.internal && net.family === 'IPv4') {
+          return net.address;
+        }
+      }
+    }
+    return 'localhost'; // Fallback
+  } catch (error) {
+    return 'localhost';
+  }
+}
+
 // Update the client ready event
 client.once(Events.ClientReady, async () => {
   await sendLog('Bot is starting up...', false, '🚀');
@@ -306,7 +329,9 @@ client.once(Events.ClientReady, async () => {
   
   logChannel = await client.channels.fetch(logChannelId);
   if (logChannel) {
+    const serverIp = await getServerIp();
     await sendLog('Bot is ready and connected to log channel!', false, '🤖');
+    await sendLog(`JSON file location: http://${serverIp}/app/data/image-list.json`, false, '📁');
   } else {
     await sendLog('Could not connect to log channel!', true);
   }

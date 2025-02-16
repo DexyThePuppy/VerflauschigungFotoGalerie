@@ -6,6 +6,9 @@ RUN apk add --no-cache vips-dev
 
 WORKDIR /app
 
+# Create data directory
+RUN mkdir -p /app/data
+
 COPY package*.json ./
 RUN npm ci --only=production
 
