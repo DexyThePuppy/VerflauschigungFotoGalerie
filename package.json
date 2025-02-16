@@ -1,10 +1,13 @@
 {
-  "name": "flauschfotobot",
+  "name": "discord-image-bot",
   "version": "1.0.0",
   "type": "module",
-  "main": "bot.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node bot.js"
   },
   "keywords": [],
   "author": "",
@@ -12,7 +15,7 @@
   "description": "",
   "dependencies": {
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.4.1",
     "sharp": "^0.33.2",
     "xmldom": "^0.6.0"
   }
