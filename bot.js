@@ -120,7 +120,7 @@ async function registerCommands() {
   }
 }
 
-// Add reaction handler
+// Update reaction handler to not remove reactions
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   // Ignore bot's own reactions
   if (user.id === client.user.id) return;
@@ -140,36 +140,34 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         const removedImage = imageList.splice(imageIndex, 1)[0];
         await saveImageList();
         
-        // Remove all reactions from the message
-        await message.reactions.removeAll();
-        
+        // Don't remove reactions anymore, just log the removal
         await sendLog(`🗑️ Image ${removedImage.filename} removed by user ${user.tag}`, false, '🗑️');
       }
     }
   }
 });
 
-// Update markImageAsProcessed to remove ❌ and ❎ if present
+// Update markImageAsProcessed to not remove existing ❌ and ❎
 async function markImageAsProcessed(message, attachment) {
   try {
-    // Remove any existing ❌ or ❎ reactions
-    for (const reaction of message.reactions.cache.values()) {
-      if (reaction.emoji.name === '❌' || reaction.emoji.name === '❎') {
-        await reaction.remove();
-      }
-    }
+    // Only add ✅ if there are no removal reactions
+    const hasRemovalReaction = message.reactions.cache.some(r => 
+      r.emoji.name === '❌' || r.emoji.name === '❎'
+    );
     
-    // Add or keep ✅ reaction
-    const existingReactions = message.reactions.cache.find(r => r.emoji.name === '✅');
-    if (!existingReactions) {
-      await message.react('✅');
+    if (!hasRemovalReaction) {
+      // Add ✅ if it's not already there
+      const existingReactions = message.reactions.cache.find(r => r.emoji.name === '✅');
+      if (!existingReactions) {
+        await message.react('✅');
+      }
     }
   } catch (error) {
     await sendLog(`Unable to manage reactions for ${attachment.name}: ${error.message}`, true);
   }
 }
 
-// Update validateImageList to handle removal reactions
+// Update validateImageList to respect removal reactions
 async function validateImageList(channel) {
   await sendLog('🔍 Starting image list validation...');
   const validImages = [];
@@ -188,8 +186,7 @@ async function validateImageList(channel) {
         
         if (hasRemovalReaction || !message.attachments.some(att => att.url === image.originalUrl)) {
           await sendLog(`🗑️ Removing ${hasRemovalReaction ? 'marked' : 'invalid'} image: ${image.filename}`, false, '🗑️');
-          // Remove all reactions
-          await message.reactions.removeAll();
+          // Don't remove reactions, let them stay as a record
           removedCount++;
           continue;
         }
