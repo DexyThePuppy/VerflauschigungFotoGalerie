@@ -16,7 +16,6 @@ const client = new Client({
 
 const MAX_RESOLUTION = 2048;
 const imageList = [];
-const STORAGE_PATH = process.env.RENDER ? '/var/data/image-list.json' : './image-list.json';
 
 // Function to download image from URL
 async function downloadImage(url) {
@@ -41,9 +40,10 @@ function getResizedDiscordUrl(url) {
 // Function to save image list to JSON
 async function saveImageList() {
   try {
+    // Sort imageList by timestamp (newest first)
     imageList.sort((a, b) => b.timestamp - a.timestamp);
-    await writeFile(STORAGE_PATH, JSON.stringify(imageList, null, 2));
-    console.log('Image list saved to', STORAGE_PATH);
+    await writeFile('image-list.json', JSON.stringify(imageList, null, 2));
+    console.log('Image list saved to image-list.json');
   } catch (error) {
     console.error('Error saving image list:', error);
   }
