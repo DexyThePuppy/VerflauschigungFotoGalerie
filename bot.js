@@ -5,6 +5,10 @@ import { get } from 'https';
 import 'dotenv/config';
 import fotogalerieCommand from './commands/fotogalerie.js';
 import express from 'express';
+import stream from 'stream';
+import { promisify } from 'util';
+
+const pipeline = promisify(stream.pipeline);
 
 const client = new Client({
   intents: [
@@ -125,7 +129,7 @@ async function registerCommands() {
   }
 }
 
-// Update reaction handler to only remove bot's checkmark
+// Update reaction handler to handle reaction removals
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   // Ignore bot's own reactions
   if (user.id === client.user.id) return;
@@ -155,6 +159,64 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         
         const messageUrl = getMessageUrl(message);
         await sendLog(`Image ${removedImage.filename} removed by user ${user.tag} ${messageUrl}`, false, '🗑️');
+      }
+    }
+  }
+});
+
+// Add handler for reaction removals
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+  // Ignore bot's own reactions
+  if (user.id === client.user.id) return;
+  
+  // Only process reactions in the photo channel
+  if (reaction.message.channelId !== photoChannelId) return;
+  
+  // Check if an X reaction was removed
+  if (reaction.emoji.name === '❌' || reaction.emoji.name === '❎') {
+    const message = reaction.message;
+    const attachment = message.attachments.first();
+    
+    if (attachment) {
+      // Check if image is not already in the list
+      const exists = imageList.some(img => img.originalUrl === attachment.url);
+      if (!exists) {
+        try {
+          const messageUrl = getMessageUrl(message);
+          await sendLog(`Re-adding image: ${attachment.name} ${messageUrl}`, false, '📥');
+          
+          const imageUrl = getResizedDiscordUrl(attachment.url);
+          const imageBuffer = await downloadImage(imageUrl);
+          
+          const fileTimestamp = parseVRChatTimestamp(attachment.name);
+          const urlTimestamp = parseDiscordUrlTimestamp(attachment.url);
+          const finalTimestamp = fileTimestamp || urlTimestamp || message.createdTimestamp;
+          
+          // Add image back to the list
+          imageList.push({
+            originalUrl: attachment.url,
+            resizedUrl: getResizedDiscordUrl(attachment.url),
+            filename: attachment.name,
+            messageId: message.id,
+            messageUrl: messageUrl,
+            size: imageBuffer.length,
+            timestamp: finalTimestamp,
+            'timestamp-readable': formatReadableTimestamp(finalTimestamp),
+            dimensions: {
+              width: (await sharp(imageBuffer).metadata()).width,
+              height: (await sharp(imageBuffer).metadata()).height
+            }
+          });
+          
+          await saveImageList();
+          
+          // Re-add the checkmark reaction
+          await message.react('✅');
+          
+          await sendLog(`Successfully re-added: ${attachment.name} ${messageUrl}`, false, '✅');
+        } catch (error) {
+          await sendLog(`Error re-adding ${attachment.name}: ${error.message}`, true);
+        }
       }
     }
   }
@@ -433,10 +495,138 @@ app.get('/image-list.json', async (req, res) => {
   }
 });
 
+// New endpoint for simplified URL list in txt format
+app.get('/image-urls.txt', async (req, res) => {
+  try {
+    await sendLog('Received request for image-urls.txt', false, '🌐');
+    const jsonData = await readFile('/app/data/image-list.json', 'utf8');
+    const imageList = JSON.parse(jsonData);
+    const urlList = imageList.map(img => img.resizedUrl).join('\n');
+    res.header('Content-Type', 'text/plain');
+    res.send(urlList);
+    await sendLog('Successfully served image-urls.txt', false, '✅');
+  } catch (error) {
+    await sendLog(`Error serving image-urls.txt: ${error.message}`, true);
+    res.status(500).send('Could not generate URL list');
+  }
+});
+
+// Function to generate a placeholder image with a color based on the number
+async function generatePlaceholderImage(number) {
+  try {
+    // Generate different colors based on the number
+    const colors = [
+      '#FFD700', // Gold
+      '#98FB98', // Pale Green
+      '#87CEEB', // Sky Blue
+      '#DDA0DD', // Plum
+      '#F08080', // Light Coral
+      '#B0C4DE', // Light Steel Blue
+      '#FFB6C4', // Light Pink
+      '#98FF98', // Mint Green
+      '#FFA07A', // Light Salmon
+      '#87CEFA'  // Light Sky Blue
+    ];
+    
+    const color = colors[number % colors.length];
+    
+    // Create a new image with the color
+    return await sharp({
+      create: {
+        width: 512,
+        height: 512,
+        channels: 4,
+        background: color
+      }
+    })
+    .png()
+    .toBuffer();
+  } catch (error) {
+    throw new Error(`Failed to generate placeholder: ${error.message}`);
+  }
+}
+
+// Function to fetch and process image from URL
+async function fetchAndProcessImage(url) {
+  try {
+    const imageBuffer = await downloadImage(url);
+    
+    // Get image metadata
+    const metadata = await sharp(imageBuffer).metadata();
+    
+    // Create a Sharp instance
+    let sharpInstance = sharp(imageBuffer);
+    
+    // Resize if needed
+    if (metadata.width > MAX_RESOLUTION || metadata.height > MAX_RESOLUTION) {
+      sharpInstance = sharpInstance.resize(MAX_RESOLUTION, MAX_RESOLUTION, {
+        fit: 'inside',
+        withoutEnlargement: true
+      });
+    }
+    
+    // Always convert to PNG with maximum quality
+    return sharpInstance
+      .png({
+        quality: 100,
+        compressionLevel: 9,
+        palette: true
+      })
+      .toBuffer();
+  } catch (error) {
+    throw new Error(`Failed to process image: ${error.message}`);
+  }
+}
+
+// New endpoint for numbered image redirects
+app.get('/image:number.png', async (req, res) => {
+  try {
+    const imageNumber = parseInt(req.params.number);
+    if (isNaN(imageNumber) || imageNumber < 1) {
+      res.status(400).send('Invalid image number');
+      return;
+    }
+
+    const jsonData = await readFile('/app/data/image-list.json', 'utf8');
+    const imageList = JSON.parse(jsonData);
+    
+    // Convert to 0-based index
+    const index = imageNumber - 1;
+    
+    // If the requested number is beyond our image list, serve a placeholder
+    if (index >= imageList.length) {
+      const placeholderBuffer = await generatePlaceholderImage(imageNumber);
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+      res.send(placeholderBuffer);
+      await sendLog(`Served placeholder image${imageNumber}.png`, false, '🎨');
+      return;
+    }
+
+    // Fetch and process the image
+    const imageUrl = imageList[index].resizedUrl;
+    const processedImageBuffer = await fetchAndProcessImage(imageUrl);
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    
+    // Send the processed image
+    res.send(processedImageBuffer);
+    
+    await sendLog(`Served image${imageNumber}.png directly from position ${index + 1}`, false, '🎨');
+  } catch (error) {
+    await sendLog(`Error serving image${req.params.number}.png: ${error.message}`, true);
+    res.status(500).send('Could not serve image');
+  }
+});
+
 // Update server startup logging
 app.listen(PORT, '0.0.0.0', () => {
   const publicIp = '212.227.57.140';  // Use the public IP
   console.log(`Web server listening on port ${PORT}`);
   console.log(`Health check: http://${publicIp}:${PORT}/health`);
   console.log(`JSON endpoint: http://${publicIp}:${PORT}/image-list.json`);
+  console.log(`Text URL list: http://${publicIp}:${PORT}/image-urls.txt`);
+  console.log(`Numbered images: http://${publicIp}:${PORT}/image1.png, /image2.png, etc.`);
 });
